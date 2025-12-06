@@ -42,13 +42,13 @@
         error = "";
 
         if (!title.trim()) {
-            error = "Title is required";
+            error = "标题不能为空";
             return;
         }
 
         const validBlocks = blocks.filter((b) => b.trim());
         if (validBlocks.length === 0) {
-            error = "At least one block is required";
+            error = "至少需要一个内容段";
             return;
         }
 
@@ -74,13 +74,13 @@
 
             if (!response.ok) {
                 const data = await response.json();
-                throw new Error(data.error || "Failed to create prompt");
+                throw new Error(data.error || "创建失败");
             }
 
             const result = await response.json();
             goto(`/prompts/${result.id}`);
         } catch (e) {
-            error = e instanceof Error ? e.message : "Failed to create prompt";
+            error = e instanceof Error ? e.message : "创建失败";
         } finally {
             saving = false;
         }
@@ -91,11 +91,11 @@
     <div class="container">
         <header class="page-header">
             <a href="/" class="btn btn-ghost back-btn">
-                <span>←</span> Back
+                返回
             </a>
             <div class="header-title">
-                <h1 class="page-header-title">✨ New Prompt</h1>
-                <p class="page-header-description">Create a new prompt with content blocks</p>
+                <h1 class="page-header-title">新建提示</h1>
+                <p class="page-header-description">将想法拆分成结构化段落，方便快速调用</p>
             </div>
         </header>
 
@@ -108,33 +108,33 @@
         >
             {#if error}
                 <div class="error-message fade-in">
-                    <span>⚠️</span> {error}
+                    {error}
                 </div>
             {/if}
 
             <div class="form-card">
                 <div class="form-section">
-                    <h3 class="form-section-title">📋 Basic Information</h3>
+                    <h3 class="form-section-title">基础信息</h3>
                     
                     <div class="form-group">
                         <label class="form-label" for="title">
-                            Title <span class="form-label-hint">(required)</span>
+                            标题 <span class="form-label-hint">（必填）</span>
                         </label>
                         <input
                             type="text"
                             id="title"
                             class="form-input"
                             bind:value={title}
-                            placeholder="Enter a descriptive title..."
+                            placeholder="请输入易于辨识的标题"
                         />
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">Category</label>
+                        <p class="form-label">分类</p>
                         <div class="category-selector">
                             {#if !showNewCategory}
                                 <select class="form-select" bind:value={userCategory}>
-                                    <option value="">No category</option>
+                                    <option value="">不设置分类</option>
                                     {#each data.categories as category}
                                         <option value={category}>{category}</option>
                                     {/each}
@@ -144,21 +144,21 @@
                                     class="btn btn-secondary"
                                     onclick={() => (showNewCategory = true)}
                                 >
-                                    <span>＋</span> New
+                                    新增分类
                                 </button>
                             {:else}
                                 <input
                                     type="text"
                                     class="form-input"
                                     bind:value={newCategory}
-                                    placeholder="Enter new category name..."
+                                    placeholder="输入新分类名称"
                                 />
                                 <button
                                     type="button"
                                     class="btn btn-ghost"
                                     onclick={() => (showNewCategory = false)}
                                 >
-                                    Cancel
+                                    取消
                                 </button>
                             {/if}
                         </div>
@@ -169,8 +169,8 @@
 
                 <div class="form-section">
                     <div class="form-section-header">
-                        <h3 class="form-section-title">📝 Content Blocks</h3>
-                        <span class="badge">{blocks.length} blocks</span>
+                        <h3 class="form-section-title">内容段</h3>
+                        <span class="badge">共 {blocks.length} 段</span>
                     </div>
                     
                     <div class="blocks-editor">
@@ -178,8 +178,7 @@
                             <div class="block-editor fade-in" style="animation-delay: {index * 50}ms">
                                 <div class="block-header">
                                     <span class="block-number">
-                                        <span class="block-number-icon">📄</span>
-                                        Block {index + 1}
+                                        段落 {index + 1}
                                     </span>
                                     <div class="block-actions-edit">
                                         <button
@@ -187,7 +186,7 @@
                                             class="btn btn-ghost btn-sm"
                                             onclick={() => moveBlock(index, "up")}
                                             disabled={index === 0}
-                                            title="Move up"
+                                            title="上移"
                                         >
                                             ↑
                                         </button>
@@ -196,7 +195,7 @@
                                             class="btn btn-ghost btn-sm"
                                             onclick={() => moveBlock(index, "down")}
                                             disabled={index === blocks.length - 1}
-                                            title="Move down"
+                                            title="下移"
                                         >
                                             ↓
                                         </button>
@@ -205,9 +204,9 @@
                                             class="btn btn-ghost btn-sm btn-danger-text"
                                             onclick={() => removeBlock(index)}
                                             disabled={blocks.length <= 1}
-                                            title="Remove block"
+                                            title="删除该段"
                                         >
-                                            🗑️
+                                            移除
                                         </button>
                                     </div>
                                 </div>
@@ -219,29 +218,29 @@
                                             index,
                                             (e.target as HTMLTextAreaElement).value,
                                         )}
-                                placeholder="Enter block content..."
+                                placeholder="填写段落内容，支持多行文本"
                             ></textarea>
                         </div>
                     {/each}
                 </div>
+            </div>
 
                 <button
                     type="button"
                     class="btn btn-secondary w-full mt-lg add-block-btn"
                     onclick={addBlock}
                 >
-                    <span>＋</span> Add Block
+                    添加新段落
                 </button>
-            </div>
             </div>
 
             <div class="form-actions">
-                <a href="/" class="btn btn-ghost btn-lg">Cancel</a>
+                <a href="/" class="btn btn-ghost btn-lg">取消</a>
                 <button type="submit" class="btn btn-primary btn-lg" disabled={saving}>
                     {#if saving}
-                        <span class="animate-spin">⟳</span> Creating...
+                        保存中…
                     {:else}
-                        <span>✓</span> Create Prompt
+                        保存提示
                     {/if}
                 </button>
             </div>
@@ -364,10 +363,6 @@
         font-size: var(--font-size-sm);
         font-weight: var(--font-weight-semibold);
         color: var(--color-text);
-    }
-
-    .block-number-icon {
-        font-size: var(--font-size-md);
     }
 
     .block-actions-edit {

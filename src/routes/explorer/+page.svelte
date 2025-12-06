@@ -96,12 +96,12 @@
             ctx.font = "16px sans-serif";
             ctx.textAlign = "center";
             ctx.fillText(
-                "No visualization data available",
+                "暂无可视化数据",
                 width / 2,
                 height / 2,
             );
             ctx.fillText(
-                "Run the Python script to generate embeddings",
+                "请先运行嵌入脚本生成坐标",
                 width / 2,
                 height / 2 + 24,
             );
@@ -193,11 +193,11 @@
     <div class="container explorer-container">
         <header class="page-header">
             <div class="header-content">
-                <h1 class="page-header-title">🔬 Prompt Explorer</h1>
+                <h1 class="page-header-title">提示分布视图</h1>
                 <p class="page-header-description">
-                    {data.prompts.length} prompts with coordinates
+                    已绘制 {data.prompts.length} 条提示的二维坐标
                     {#if data.categories.length > 0}
-                        · {data.categories.length} clusters detected
+                        · 自动识别 {data.categories.length} 个聚类
                     {/if}
                 </p>
             </div>
@@ -205,7 +205,7 @@
 
         {#if data.categories.length > 0}
             <div class="legend fade-in">
-                <div class="legend-title">🏷️ Clusters</div>
+                <div class="legend-title">聚类标签</div>
                 <div class="legend-items">
                     {#each data.categories as category, index}
                         <div class="legend-item">
@@ -234,17 +234,17 @@
                     class="tooltip"
                     style="left: {hoveredPrompt.x}px; top: {hoveredPrompt.y - 40}px"
                 >
-                    <span class="tooltip-icon">📝</span>
-                    {hoveredPrompt.title}
+                    <span class="tooltip-label">提示</span>
+                    <span class="tooltip-text">{hoveredPrompt.title}</span>
                 </div>
             {/if}
 
             {#if data.prompts.length === 0}
                 <div class="canvas-empty-state">
-                    <div class="empty-state-icon">🗺️</div>
-                    <div class="empty-state-title">No visualization data</div>
+                    <div class="empty-state-icon">图</div>
+                    <div class="empty-state-title">暂无数据</div>
                     <p class="empty-state-description">
-                        Run the Python script to generate embeddings and explore your prompts visually
+                        运行 scripts/compute_embeddings.py 生成嵌入，再回到此处查看空间分布。
                     </p>
                 </div>
             {/if}
@@ -348,8 +348,14 @@
         animation: fadeInUp var(--transition-fast) ease-out;
     }
 
-    .tooltip-icon {
-        font-size: var(--font-size-md);
+    .tooltip-label {
+        font-size: var(--font-size-xs);
+        color: var(--color-text-muted);
+        letter-spacing: 0.08em;
+    }
+
+    .tooltip-text {
+        font-weight: var(--font-weight-medium);
     }
 
     .canvas-empty-state {
@@ -365,9 +371,15 @@
     }
 
     .canvas-empty-state .empty-state-icon {
-        font-size: 4rem;
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--color-border);
+        font-size: var(--font-size-lg);
         margin-bottom: var(--space-lg);
-        opacity: 0.5;
     }
 
     @keyframes fadeInUp {

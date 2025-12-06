@@ -3,12 +3,30 @@
 
     let { data }: PageProps = $props();
 
-    let backups = $state(data.backups);
+    type BackupEntry = (typeof data.backups)[number];
+    const initialBackups = $derived.by(() => data.backups);
+
+    let backups = $state<BackupEntry[]>([]);
     let restoring = $state<string | null>(null);
     let deleting = $state<string | null>(null);
     let toastMessage = $state("");
     let toastVisible = $state(false);
     let toastType = $state<"success" | "error">("success");
+
+    $effect(() => {
+        backups = [...initialBackups];
+    });
+
+    let totalSizeLabel = $derived.by(() => {
+        const totalBytes = backups.reduce(
+            (sum, backup) => sum + backup.size,
+            0,
+        );
+        if (totalBytes === 0) return "0 B";
+        return totalBytes >= 1024 * 1024
+            ? `${(totalBytes / (1024 * 1024)).toFixed(1)} MB`
+            : `${(totalBytes / 1024).toFixed(1)} KB`;
+    });
 
     function showToast(message: string, type: "success" | "error" = "success") {
         toastMessage = message;
@@ -24,7 +42,9 @@
     }
 
     function formatDate(isoString: string): string {
-        return new Date(isoString).toLocaleString();
+        return new Date(isoString).toLocaleString("zh-CN", {
+            hour12: false,
+        });
     }
 
     async function handleExport() {
@@ -39,7 +59,7 @@
 
         if (
             !confirm(
-                "Warning: Importing will replace ALL existing prompts. A backup will be created automatically. Continue?",
+                "导入会覆盖当前所有提示数据，系统会自动生成备份，确定继续吗？",
             )
         ) {
             input.value = "";
@@ -61,20 +81,20 @@
 
             if (!response.ok) {
                 const result = await response.json();
-                throw new Error(result.error || "Import failed");
+                throw new Error(result.error || "导入失败");
             }
 
             const result = await response.json();
             showToast(
-                `Imported ${result.imported} prompts. Backup created: ${result.backupCreated}`,
+                `已导入 ${result.imported} 条提示，自动备份：${result.backupCreated}`,
             );
 
             // Refresh backup list
             const backupsResponse = await fetch("/api/backups");
-            backups = await backupsResponse.json();
+            backups = (await backupsResponse.json()) as BackupEntry[];
         } catch (error) {
             showToast(
-                error instanceof Error ? error.message : "Import failed",
+                error instanceof Error ? error.message : "导入失败",
                 "error",
             );
         } finally {
@@ -85,7 +105,7 @@
     async function restoreBackup(filename: string) {
         if (
             !confirm(
-                `Are you sure you want to restore "${filename}"? This will replace the current database.`,
+                `确定要恢复备份「${filename}」吗？此操作会覆盖当前数据。`,
             )
         ) {
             return;
@@ -105,16 +125,16 @@
 
             if (!response.ok) {
                 const result = await response.json();
-                throw new Error(result.error || "Restore failed");
+                throw new Error(result.error || "恢复失败");
             }
 
-            showToast(`Restored backup: ${filename}`);
+            showToast(`已恢复备份：${filename}`);
 
             // Reload page to reflect changes
             setTimeout(() => window.location.reload(), 1000);
         } catch (error) {
             showToast(
-                error instanceof Error ? error.message : "Restore failed",
+                error instanceof Error ? error.message : "恢复失败",
                 "error",
             );
         } finally {
@@ -125,7 +145,7 @@
     async function deleteBackup(filename: string) {
         if (
             !confirm(
-                `Are you sure you want to delete "${filename}"? This cannot be undone.`,
+                `确定要删除备份「${filename}」吗？删除后无法找回。`,
             )
         ) {
             return;
@@ -146,16 +166,16 @@
 
             if (!response.ok) {
                 const result = await response.json();
-                throw new Error(result.error || "Delete failed");
+                throw new Error(result.error || "删除失败");
             }
 
             backups = backups.filter(
                 (b: { filename: string }) => b.filename !== filename,
             );
-            showToast(`Deleted backup: ${filename}`);
+            showToast(`已删除备份：${filename}`);
         } catch (error) {
             showToast(
-                error instanceof Error ? error.message : "Delete failed",
+                error instanceof Error ? error.message : "删除失败",
                 "error",
             );
         } finally {
@@ -168,26 +188,26 @@
     <div class="container">
         <header class="page-header">
             <div class="header-content">
-                <h1 class="page-header-title">💾 Backup Management</h1>
+                <h1 class="page-header-title">数据备份与迁移</h1>
                 <p class="page-header-description">
-                    Manage your database backups and import/export data
+                    导出归档、快速导入，并在需要时恢复任意历史快照
                 </p>
             </div>
         </header>
 
         <div class="stats-grid">
             <div class="stat-card fade-in">
-                <div class="stat-icon">📦</div>
+                <div class="stat-icon">数量</div>
                 <div class="stat-info">
                     <div class="stat-value">{backups.length}</div>
-                    <div class="stat-label">Total Backups</div>
+                    <div class="stat-label">备份文件</div>
                 </div>
             </div>
             <div class="stat-card fade-in" style="animation-delay: 100ms">
-                <div class="stat-icon">📄</div>
+                <div class="stat-icon">容量</div>
                 <div class="stat-info">
-                    <div class="stat-value">{backups.reduce((acc, b) => acc + b.size, 0) > 1024 * 1024 ? (backups.reduce((acc, b) => acc + b.size, 0) / (1024 * 1024)).toFixed(1) + ' MB' : (backups.reduce((acc, b) => acc + b.size, 0) / 1024).toFixed(1) + ' KB'}</div>
-                    <div class="stat-label">Total Size</div>
+                    <div class="stat-value">{totalSizeLabel}</div>
+                    <div class="stat-label">占用空间</div>
                 </div>
             </div>
         </div>
@@ -195,20 +215,20 @@
         <section class="card section-card mb-xl fade-in">
             <div class="section-header">
                 <div>
-                    <h2 class="section-title">📤 Import / Export</h2>
+                    <h2 class="section-title">导入 / 导出</h2>
                     <p class="section-description">
-                        Export all prompts to JSON or import from a backup file
+                        将全部提示导出为 JSON，或从备份文件中恢复
                     </p>
                 </div>
             </div>
 
             <div class="action-buttons">
                 <button class="btn btn-primary btn-lg" onclick={handleExport}>
-                    <span>⬇️</span> Export All Data
+                    导出全部数据
                 </button>
 
                 <label class="btn btn-secondary btn-lg">
-                    <span>⬆️</span> Import JSON
+                    导入 JSON
                     <input
                         type="file"
                         accept=".json"
@@ -222,34 +242,34 @@
         <section class="card section-card fade-in" style="animation-delay: 150ms">
             <div class="section-header">
                 <div>
-                    <h2 class="section-title">🗄️ Database Backups</h2>
+                    <h2 class="section-title">备份清单</h2>
                     <p class="section-description">
-                        Backups are created automatically before imports
+                        每次导入前会自动保存最新快照，支持随时恢复
                     </p>
                 </div>
             </div>
 
             {#if backups.length === 0}
                 <div class="empty-state">
-                    <div class="empty-state-icon">📁</div>
-                    <div class="empty-state-title">No backups yet</div>
+                    <div class="empty-state-icon">备</div>
+                    <div class="empty-state-title">暂无备份</div>
                     <p class="empty-state-description">
-                        Backups will be created automatically when you import data
+                        首次导入数据时系统会自动生成一份备份文件。
                     </p>
                 </div>
             {:else}
                 <div class="backup-list">
                     {#each backups as backup, i (backup.filename)}
                         <div class="backup-item fade-in" style="animation-delay: {200 + i * 50}ms">
-                            <div class="backup-icon">📄</div>
+                            <div class="backup-icon">档</div>
                             <div class="backup-info">
                                 <span class="backup-name">{backup.filename}</span>
                                 <div class="backup-meta">
                                     <span class="backup-meta-item">
-                                        <span>📊</span> {formatSize(backup.size)}
+                                        大小：{formatSize(backup.size)}
                                     </span>
                                     <span class="backup-meta-item">
-                                        <span>📅</span> {formatDate(backup.createdAt)}
+                                        时间：{formatDate(backup.createdAt)}
                                     </span>
                                 </div>
                             </div>
@@ -260,9 +280,9 @@
                                     disabled={restoring === backup.filename}
                                 >
                                     {#if restoring === backup.filename}
-                                        <span class="animate-spin">⟳</span> Restoring...
+                                        恢复中…
                                     {:else}
-                                        <span>↩️</span> Restore
+                                        恢复
                                     {/if}
                                 </button>
                                 <button
@@ -271,9 +291,9 @@
                                     disabled={deleting === backup.filename}
                                 >
                                     {#if deleting === backup.filename}
-                                        <span class="animate-spin">⟳</span> Deleting...
+                                        删除中…
                                     {:else}
-                                        <span>🗑️</span> Delete
+                                        删除
                                     {/if}
                                 </button>
                             </div>
@@ -290,8 +310,8 @@
         class="toast fade-in"
         class:toast-success={toastType === "success"}
         class:toast-error={toastType === "error"}
+        role="status"
     >
-        <span>{toastType === "success" ? "✓" : "✕"}</span>
         {toastMessage}
     </div>
 {/if}

@@ -4,12 +4,32 @@
 
     let { data }: PageProps = $props();
 
+    const currentPrompt = $derived.by(() => data.prompt);
+
+    type EditableBlock = {
+        id: number;
+        prompt_id: number;
+        content: string;
+        sort_order: number;
+    };
+
     // Editable state
-    let title = $state(data.prompt.title);
-    let userCategory = $state(data.prompt.user_category || "");
+    let title = $state("");
+    let userCategory = $state("");
     let newCategory = $state("");
     let showNewCategory = $state(false);
-    let blocks = $state(data.prompt.blocks.map((b) => ({ ...b })));
+    let blocks = $state<EditableBlock[]>([]);
+
+    $effect(() => {
+        title = currentPrompt.title;
+        userCategory = currentPrompt.user_category || "";
+        blocks = currentPrompt.blocks.map((b) => ({
+            id: b.id,
+            prompt_id: b.prompt_id,
+            content: b.content,
+            sort_order: b.sort_order,
+        }));
+    });
 
     let editing = $state(false);
     let saving = $state(false);
@@ -26,21 +46,26 @@
 
     async function copyBlock(content: string) {
         await navigator.clipboard.writeText(content);
-        showToast("Block copied!");
+        showToast("段落已复制");
     }
 
     async function copyAll() {
         const text = blocks.map((b) => b.content).join("\n\n");
         await navigator.clipboard.writeText(text);
-        showToast("All blocks copied!");
+        showToast("整条提示已复制");
     }
 
     function startEdit() {
         editing = true;
         // Reset to original values
-        title = data.prompt.title;
-        userCategory = data.prompt.user_category || "";
-        blocks = data.prompt.blocks.map((b) => ({ ...b }));
+        title = currentPrompt.title;
+        userCategory = currentPrompt.user_category || "";
+        blocks = currentPrompt.blocks.map((b) => ({
+            id: b.id,
+            prompt_id: b.prompt_id,
+            content: b.content,
+            sort_order: b.sort_order,
+        }));
     }
 
     function cancelEdit() {
@@ -54,7 +79,7 @@
             ...blocks,
             {
                 id: 0,
-                prompt_id: data.prompt.id,
+                prompt_id: currentPrompt.id,
                 content: "",
                 sort_order: maxOrder + 1,
             },
@@ -90,13 +115,13 @@
         error = "";
 
         if (!title.trim()) {
-            error = "Title is required";
+            error = "标题不能为空";
             return;
         }
 
         const validBlocks = blocks.filter((b) => b.content.trim());
         if (validBlocks.length === 0) {
-            error = "At least one block is required";
+            error = "至少需要一个内容段";
             return;
         }
 
@@ -125,13 +150,13 @@
 
             if (!response.ok) {
                 const data = await response.json();
-                throw new Error(data.error || "Failed to save changes");
+                throw new Error(data.error || "保存失败");
             }
 
             // Reload data
             window.location.reload();
         } catch (e) {
-            error = e instanceof Error ? e.message : "Failed to save changes";
+            error = e instanceof Error ? e.message : "保存失败";
         } finally {
             saving = false;
         }
@@ -140,7 +165,7 @@
     async function deletePrompt() {
         if (
             !confirm(
-                "Are you sure you want to delete this prompt? This action cannot be undone.",
+                "确定要删除该提示吗？此操作无法撤销。",
             )
         ) {
             return;
@@ -158,12 +183,12 @@
 
             if (!response.ok) {
                 const data = await response.json();
-                throw new Error(data.error || "Failed to delete prompt");
+                throw new Error(data.error || "删除失败");
             }
 
             goto("/");
         } catch (e) {
-            error = e instanceof Error ? e.message : "Failed to delete prompt";
+            error = e instanceof Error ? e.message : "删除失败";
             deleting = false;
         }
     }
@@ -173,16 +198,16 @@
     <div class="container">
         <header class="page-header">
             <a href="/" class="btn btn-ghost back-btn">
-                <span>←</span> Back
+                返回
             </a>
 
             {#if !editing}
                 <div class="header-actions">
                     <button class="btn btn-primary" onclick={copyAll}>
-                        <span>📋</span> Copy All
+                        复制全部
                     </button>
                     <button class="btn btn-secondary" onclick={startEdit}>
-                        <span>✏️</span> Edit
+                        进入编辑
                     </button>
                     <button
                         class="btn btn-danger"
@@ -190,9 +215,9 @@
                         disabled={deleting}
                     >
                         {#if deleting}
-                            <span class="animate-spin">⟳</span> Deleting...
+                            删除中…
                         {:else}
-                            <span>🗑️</span> Delete
+                            删除
                         {/if}
                     </button>
                 </div>
@@ -209,16 +234,16 @@
             >
                 {#if error}
                     <div class="error-message fade-in">
-                        <span>⚠️</span> {error}
+                        {error}
                     </div>
                 {/if}
 
                 <div class="form-card">
                     <div class="form-section">
-                        <h3 class="form-section-title">📋 Basic Information</h3>
+                        <h3 class="form-section-title">基础信息</h3>
 
                         <div class="form-group">
-                            <label class="form-label" for="title">Title</label>
+                            <label class="form-label" for="title">标题</label>
                             <input
                                 type="text"
                                 id="title"
@@ -228,14 +253,14 @@
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label">Category</label>
+                            <p class="form-label">分类</p>
                             <div class="category-selector">
                                 {#if !showNewCategory}
                                     <select
                                         class="form-select"
                                         bind:value={userCategory}
                                     >
-                                        <option value="">No category</option>
+                                        <option value="">不设置分类</option>
                                         {#each data.categories as category}
                                             <option value={category}>{category}</option>
                                         {/each}
@@ -245,21 +270,21 @@
                                         class="btn btn-secondary"
                                         onclick={() => (showNewCategory = true)}
                                     >
-                                        <span>＋</span> New
+                                        新增分类
                                     </button>
                                 {:else}
                                     <input
                                         type="text"
                                         class="form-input"
                                         bind:value={newCategory}
-                                        placeholder="New category..."
+                                        placeholder="输入新分类名称"
                                     />
                                     <button
                                         type="button"
                                         class="btn btn-ghost"
                                         onclick={() => (showNewCategory = false)}
                                     >
-                                        Cancel
+                                        取消
                                     </button>
                                 {/if}
                             </div>
@@ -270,8 +295,8 @@
 
                     <div class="form-section">
                         <div class="form-section-header">
-                            <h3 class="form-section-title">📝 Content Blocks</h3>
-                            <span class="badge">{blocks.length} blocks</span>
+                            <h3 class="form-section-title">内容段</h3>
+                            <span class="badge">共 {blocks.length} 段</span>
                         </div>
 
                         <div class="blocks-editor">
@@ -279,8 +304,7 @@
                                 <div class="block-editor fade-in">
                                     <div class="block-header">
                                         <span class="block-number">
-                                            <span class="block-number-icon">📄</span>
-                                            Block {index + 1}
+                                            段落 {index + 1}
                                         </span>
                                         <div class="block-actions-edit">
                                             <button
@@ -288,19 +312,22 @@
                                                 class="btn btn-ghost btn-sm"
                                                 onclick={() => moveBlock(index, "up")}
                                                 disabled={index === 0}
+                                                title="上移"
                                             >↑</button>
                                             <button
                                                 type="button"
                                                 class="btn btn-ghost btn-sm"
                                                 onclick={() => moveBlock(index, "down")}
                                                 disabled={index === blocks.length - 1}
+                                                title="下移"
                                             >↓</button>
                                             <button
                                                 type="button"
                                                 class="btn btn-ghost btn-sm btn-danger-text"
                                                 onclick={() => removeBlock(index)}
                                                 disabled={blocks.length <= 1}
-                                            >🗑️</button>
+                                                title="删除该段"
+                                            >移除</button>
                                         </div>
                                     </div>
                                     <textarea
@@ -311,6 +338,7 @@
                                                 index,
                                                 (e.target as HTMLTextAreaElement).value,
                                             )}
+                                        placeholder="填写段落内容"
                                     ></textarea>
                                 </div>
                             {/each}
@@ -321,7 +349,7 @@
                             class="btn btn-secondary w-full mt-lg add-block-btn"
                             onclick={addBlock}
                         >
-                            <span>＋</span> Add Block
+                            添加新段落
                         </button>
                     </div>
                 </div>
@@ -331,16 +359,16 @@
                         type="button"
                         class="btn btn-ghost btn-lg"
                         onclick={cancelEdit}
-                    >Cancel</button>
+                    >取消编辑</button>
                     <button
                         type="submit"
                         class="btn btn-primary btn-lg"
                         disabled={saving}
                     >
                         {#if saving}
-                            <span class="animate-spin">⟳</span> Saving...
+                            保存中…
                         {:else}
-                            <span>✓</span> Save Changes
+                            保存更改
                         {/if}
                     </button>
                 </div>
@@ -352,16 +380,16 @@
                     <div class="prompt-meta">
                         {#if data.prompt.user_category}
                             <span class="badge badge-primary badge-lg">
-                                <span>📁</span> {data.prompt.user_category}
+                                分类：{data.prompt.user_category}
                             </span>
                         {/if}
                         {#if data.prompt.algo_category}
                             <span class="badge badge-lg">
-                                <span>🔬</span> {data.prompt.algo_category}
+                                聚类：{data.prompt.algo_category}
                             </span>
                         {/if}
                         <span class="text-sm text-muted">
-                            📅 {new Date(data.prompt.updated_at).toLocaleDateString()}
+                            更新：{new Date(data.prompt.updated_at).toLocaleString("zh-CN", { hour12: false })}
                         </span>
                     </div>
                 </header>
@@ -374,10 +402,10 @@
                                     class="btn btn-ghost btn-sm"
                                     onclick={() => copyBlock(block.content)}
                                 >
-                                    📋 Copy
+                                    复制
                                 </button>
                             </div>
-                            <div class="block-label">Block {index + 1}</div>
+                            <div class="block-label">段落 {index + 1}</div>
                             <div class="block-content">{block.content}</div>
                         </div>
                     {/each}
@@ -388,8 +416,8 @@
 </div>
 
 {#if toastVisible}
-    <div class="toast toast-success fade-in">
-        <span>✓</span> {toastMessage}
+    <div class="toast toast-success fade-in" role="status">
+        {toastMessage}
     </div>
 {/if}
 
@@ -510,10 +538,6 @@
         font-size: var(--font-size-sm);
         font-weight: var(--font-weight-semibold);
         color: var(--color-text);
-    }
-
-    .block-number-icon {
-        font-size: var(--font-size-md);
     }
 
     .block-actions-edit {

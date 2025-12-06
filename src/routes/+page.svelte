@@ -6,6 +6,31 @@
     let viewMode = $state<"user" | "algo">("user");
     let searchQuery = $state("");
 
+    // Derived stats for quick overview
+    let stats = $derived.by(() => {
+        const totalBlocks = data.prompts.reduce(
+            (sum, prompt) => sum + prompt.blocks.length,
+            0,
+        );
+        const userCategories = new Set(
+            data.prompts
+                .map((prompt) => prompt.user_category)
+                .filter(Boolean) as string[],
+        );
+        const algoCategories = new Set(
+            data.prompts
+                .map((prompt) => prompt.algo_category)
+                .filter(Boolean) as string[],
+        );
+
+        return {
+            totalPrompts: data.prompts.length,
+            totalBlocks,
+            userCategories: userCategories.size,
+            algoCategories: algoCategories.size,
+        };
+    });
+
     // Filter prompts by search query
     let filteredPrompts = $derived.by(() => {
         if (!searchQuery.trim()) return data.prompts;
@@ -43,7 +68,7 @@
 
         // Add uncategorized at the end if exists
         if (uncategorized.length > 0) {
-            sortedGroups.push(["Uncategorized", uncategorized]);
+            sortedGroups.push(["未分类", uncategorized]);
         }
 
         return sortedGroups;
@@ -56,7 +81,7 @@
 
         const text = prompt.blocks.map((b) => b.content).join("\n\n");
         await navigator.clipboard.writeText(text);
-        showToast("Copied to clipboard!");
+        showToast("已复制到剪贴板");
     }
 
     // Toast notification
@@ -76,67 +101,117 @@
     <div class="container">
         <header class="page-header">
             <div class="header-content">
-                <h1 class="page-header-title">✨ Prompts</h1>
+                <p class="eyebrow">提示资源</p>
+                <h1 class="page-header-title">提示库总览</h1>
                 <p class="page-header-description">
-                    {data.prompts.length} prompts in your library
+                    已收录 {data.prompts.length} 条提示模板，可随时检索与复用
                 </p>
             </div>
 
             <div class="header-actions">
-                <div class="search-input-wrapper">
-                    <span class="search-icon">🔍</span>
+                <label class="search-input-wrapper" aria-label="搜索提示">
+                    <svg
+                        class="search-icon"
+                        viewBox="0 0 24 24"
+                        role="presentation"
+                        aria-hidden="true"
+                    >
+                        <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.5" fill="none" />
+                        <line
+                            x1="15.5"
+                            y1="15.5"
+                            x2="21"
+                            y2="21"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            stroke-linecap="round"
+                        />
+                    </svg>
                     <input
-                        type="text"
+                        type="search"
                         class="form-input"
-                        placeholder="Search prompts..."
+                        placeholder="搜索标题或正文"
                         bind:value={searchQuery}
                     />
-                </div>
+                </label>
                 <a href="/prompts/new" class="btn btn-primary">
-                    <span>＋</span> New Prompt
+                    新建提示
                 </a>
             </div>
         </header>
+
+        <section class="stats-grid overview-grid">
+            <div class="stat-card">
+                <div class="stat-icon">提示</div>
+                <div>
+                    <div class="stat-value">{stats.totalPrompts}</div>
+                    <div class="stat-label">当前总数</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">段落</div>
+                <div>
+                    <div class="stat-value">{stats.totalBlocks}</div>
+                    <div class="stat-label">内容拆分</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">分类</div>
+                <div>
+                    <div class="stat-value">{stats.userCategories}</div>
+                    <div class="stat-label">自定义标签</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">聚类</div>
+                <div>
+                    <div class="stat-value">{stats.algoCategories}</div>
+                    <div class="stat-label">算法建议</div>
+                </div>
+            </div>
+        </section>
 
         <div class="view-controls">
             <div class="view-toggle">
                 <button
                     class="view-toggle-btn"
                     class:active={viewMode === "user"}
+                    aria-pressed={viewMode === "user"}
                     onclick={() => (viewMode = "user")}
                 >
-                    📁 By Category
+                    按自定义分类
                 </button>
                 <button
                     class="view-toggle-btn"
                     class:active={viewMode === "algo"}
+                    aria-pressed={viewMode === "algo"}
                     onclick={() => (viewMode = "algo")}
                 >
-                    🔬 By Cluster
+                    按聚类标签
                 </button>
             </div>
         </div>
 
         {#if data.prompts.length === 0}
             <div class="empty-state fade-in">
-                <div class="empty-state-icon">📝</div>
-                <div class="empty-state-title">No prompts yet</div>
+                <div class="empty-state-icon">空</div>
+                <div class="empty-state-title">尚未创建提示</div>
                 <p class="empty-state-description">
-                    Create your first prompt to get started managing your AI conversations
+                    使用“新建提示”按钮，将常用写作或对话思路整理成可复用的模板。
                 </p>
                 <a href="/prompts/new" class="btn btn-primary btn-lg">
-                    Create Your First Prompt
+                    立即创建
                 </a>
             </div>
         {:else if filteredPrompts.length === 0}
             <div class="empty-state fade-in">
-                <div class="empty-state-icon">🔍</div>
-                <div class="empty-state-title">No matching prompts</div>
+                <div class="empty-state-icon">搜</div>
+                <div class="empty-state-title">未找到匹配内容</div>
                 <p class="empty-state-description">
-                    Try adjusting your search query or browse all prompts
+                    调整关键字或清空搜索条件，重新浏览全部提示。
                 </p>
                 <button class="btn btn-secondary" onclick={() => (searchQuery = "")}>
-                    Clear Search
+                    清空搜索
                 </button>
             </div>
         {:else}
@@ -163,9 +238,9 @@
                                             e.stopPropagation();
                                             copyAll(prompt.id);
                                         }}
-                                        title="Copy all blocks"
+                                        title="复制整条提示"
                                     >
-                                        📋
+                                        复制
                                     </button>
                                 </div>
 
@@ -179,16 +254,16 @@
 
                                 <div class="prompt-meta">
                                     <span class="badge">
-                                        <span>📦</span> {prompt.blocks.length} blocks
+                                        {prompt.blocks.length} 段内容
                                     </span>
                                     {#if prompt.user_category && viewMode === "algo"}
                                         <span class="badge badge-primary">
-                                            {prompt.user_category}
+                                            自定义：{prompt.user_category}
                                         </span>
                                     {/if}
                                     {#if prompt.algo_category && viewMode === "user"}
                                         <span class="badge badge-info">
-                                            {prompt.algo_category}
+                                            聚类：{prompt.algo_category}
                                         </span>
                                     {/if}
                                 </div>
@@ -202,43 +277,50 @@
 </div>
 
 {#if toastVisible}
-    <div class="toast toast-success fade-in">
-        <span>✓</span> {toastMessage}
+    <div class="toast toast-success fade-in" role="status">
+        {toastMessage}
     </div>
 {/if}
 
 <style>
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: var(--space-2xl);
-        flex-wrap: wrap;
-        gap: var(--space-lg);
+    .eyebrow {
+        font-size: var(--font-size-xs);
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+        margin-bottom: var(--space-xs);
     }
 
     .header-actions {
         display: flex;
         align-items: center;
         gap: var(--space-md);
+        flex-wrap: wrap;
     }
 
     .search-input-wrapper {
         position: relative;
-        width: 300px;
+        width: 320px;
+        display: flex;
+        align-items: center;
+        gap: var(--space-sm);
     }
 
-    .search-input-wrapper .search-icon {
+    .search-icon {
         position: absolute;
         left: var(--space-md);
-        top: 50%;
-        transform: translateY(-50%);
-        font-size: var(--font-size-sm);
-        pointer-events: none;
+        width: 18px;
+        height: 18px;
+        color: var(--color-text-muted);
     }
 
     .search-input-wrapper .form-input {
-        padding-left: 2.5rem;
+        width: 100%;
+        padding-left: 2.75rem;
+    }
+
+    .overview-grid {
+        margin-bottom: var(--space-2xl);
     }
 
     .view-controls {
@@ -247,7 +329,7 @@
 
     .prompts-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
         gap: var(--space-lg);
     }
 
@@ -256,16 +338,16 @@
         flex-direction: column;
         text-decoration: none;
         color: inherit;
-        min-height: 180px;
+        min-height: 190px;
+        gap: var(--space-sm);
     }
 
     .prompt-card .card-header {
-        margin-bottom: var(--space-sm);
+        margin-bottom: 0;
     }
 
     .prompt-preview {
         flex: 1;
-        margin-bottom: var(--space-md);
     }
 
     .preview-text {
@@ -283,22 +365,18 @@
     }
 
     .copy-btn {
-        opacity: 0;
-        transition: opacity var(--transition-fast);
-    }
-
-    .prompt-card:hover .copy-btn {
-        opacity: 1;
+        font-size: var(--font-size-xs);
+        text-transform: none;
     }
 
     @media (max-width: 768px) {
         .page-header {
             flex-direction: column;
-            align-items: stretch;
+            align-items: flex-start;
         }
 
         .header-actions {
-            flex-direction: column;
+            width: 100%;
         }
 
         .search-input-wrapper {
