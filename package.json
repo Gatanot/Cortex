@@ -24,6 +24,7 @@
 		"vite": "^7.2.2"
 	},
 	"dependencies": {
-		"better-sqlite3": "^12.5.0"
+		"better-sqlite3": "^12.5.0",
+		"dotenv": "^16.1.4"
 	}
 }

@@ -1,3 +1,7 @@
+// Load .env into process.env at runtime when present (useful for simple deployments)
+// NOTE: in production it's recommended to set environment variables in the host/service
+// instead of relying on a repository .env file.
+import 'dotenv/config';
 import type { Handle } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import { json, redirect } from '@sveltejs/kit';
