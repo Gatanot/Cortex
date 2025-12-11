@@ -46,6 +46,9 @@
             <a href="/explorer" class="nav-link" class:active={isActive('/explorer')}>
                 <span>🔬</span> Explorer
             </a>
+            <a href="/upload" class="nav-link" class:active={isActive('/upload')}>
+                <span>📁</span> Upload
+            </a>
             <a href="/backups" class="nav-link" class:active={isActive('/backups')}>
                 <span>💾</span> Backups
             </a>

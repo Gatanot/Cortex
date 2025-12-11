@@ -1,145 +1,122 @@
-### 项目需求与开发约束文档:Cortex
+# Cortex 项目功能拓展技术规格说明书 (v1.0)
 
-- 版本: 1.0
-- 日期: 2025年12月6日
-- 状态: 已批准,待开发
+## 1. 概述
+本项目旨在为 Cortex 现有架构增加 Web 安全访问控制层及临时文件中转服务。系统需在保持原有 Python 脚本 API 访问畅通的前提下,通过 SvelteKit 服务端钩子实现鉴权,并利用 Node.js 文件流处理技术实现高效的文件管理
 
-### 1. 项目概述
+## 2. 模块一：认证与授权系统 (Authentication & Authorization)
 
-Cortex 是一个为个人开发者、研究人员和创意工作者设计的轻量级、高性能的提示词(Prompt)管理系统.其核心目标是提供一个简洁、快速的界面来存储、组织和检索复杂的提示词结构,并通过本地化的AI算法自动对提示词进行智能分类和可视化,以揭示其内在联系
+### 2.1 核心逻辑约束
+- 架构模式：采用 RBAC (Role-Based Access Control) 的简化变体
+    - Role A (System/Script): 持有 `API_KEY`,拥有数据读写权限,无视 Session 状态
+    - Role B (Web User): 持有有效 `Session`,拥有完整 Web 界面访问权限
+    - Guest: 无凭证,仅可访问 `/login` 及静态资源
+- 拦截点：必须在 `src/hooks.server.ts` 的 `handle` 函数中实现全局拦截
 
-项目遵循本地计算,云端存储的原则,最大化数据隐私与安全,同时将服务器运营成本降至最低
+### 2.2 详细功能需求
 
-### 2. 设计与开发原则
+#### A. 环境变量配置
+系统需从 `.env` 读取以下新变量：
+- `WEB_PASSWORD`: 纯文本密码(用于 Web 登录比对)
+- `SESSION_SECRET`: 用于签名 Cookie 的高熵字符串(至少 32 字符)
+- `SESSION_MAX_AGE`: Session 有效期(建议设置为 7 天,秒为单位)
 
-- 性能优先: 所有技术选型和实现都应以在低配服务器(2核2G)上流畅运行为首要目标
-- 数据安全: 用户数据是核心资产.必须提供可靠的备份与恢复机制,并保护API免受未经授权的访问
-- 低成本运维: 架构设计必须支持在廉价的云服务器上部署,避免不必要的资源消耗.核心计算任务(向量化、聚类)在用户本地执行
-- 现代且实用: UI/UX应遵循现代设计理念,注重功能性、响应式布局和用户体验,避免不必要的装饰
+#### B. 登录流程 (`/login`)
+1. UI: 提供包含密码输入框的简单表单
+2. 提交: POST 请求至 `?/login` Action
+3. 验证:
+    - 若密码匹配 `WEB_PASSWORD`,生成 Session
+    - Session 实现: 推荐使用 SvelteKit 的 `cookies.set` 方法,写入一个经过签名的 Cookie(名称如 `cortex_session`),内容可以是简单的状态标识(如 `{ auth: true }`)
+    - 属性强制: Cookie 必须设置 `HttpOnly: true`, `Path: /`, `Secure: true` (生产环境), `SameSite: Lax`
+4. 跳转: 验证成功后,强制重定向至用户原本请求的页面(默认为 `/`)
 
-### 3. 核心功能需求
+#### C. 鉴权逻辑优先级 (Hook Implementation)
+在 `hooks.server.ts` 中,请求处理顺序如下(严禁颠倒)：
+1. 静态资源豁免: 若 URL 匹配 `/_app`, `/favicon.ico` 等,直接放行
+2. API 豁免: 检查 HTTP Header `Authorization`
+    - 格式: `Bearer <你的环境变量API_KEY>`
+    - 若匹配,直接放行(这是 Python 脚本的通道)
+3. Session 检查: 解析 Cookie
+    - 若 Cookie 有效且签名正确,放行
+4. 拒绝策略:
+    - 上述均不满足,且当前路径不是 `/login` -> HTTP 303 Redirect 至 `/login`
 
-#### 3.1. 提示词管理 (CRUD)
-- 创建 (Create): 用户可以创建一个新的提示词.每个提示词必须包含一个标题和至少一个内容块
-- 读取 (Read):
-    - 在主界面以列表形式展示所有提示词,显示其标题和分类
-    - 点击列表项可进入独立的详情/编辑页面,查看其所有内容块
-- 更新 (Update): 用户可以修改提示词的标题、用户自定义分类及其所有内容块
-- 删除 (Delete): 用户可以永久删除一个提示词及其所有关联的内容块
+---
 
-#### 3.2. 提示词块 (Block) 结构
-- 每个提示词由一个或多个有序的文本“块”组成
-- 用户可以对块进行新增、编辑和删除操作
-- 块排序: 为避免拖拽实现的复杂性,每个块应提供“上移”和“下移”按钮来调整其在提示词内的顺序
+## 3. 模块二：文件管理系统 (File Manager)
 
-#### 3.3. 双分类系统
-- 用户分类 (`user_category`): 每个提示词可拥有一个由用户手动选择的分类.此分类可为空.用户可以在界面上创建和管理这些分类标签
-- 算法分类 (`algo_category`): 每个提示词可拥有一个由本地聚类算法自动计算出的分类.在计算完成前,此字段为空
-- 视图切换: UI界面必须提供一个明确的切换控件(如按钮组或下拉菜单),允许用户在“按用户分类查看”和“按算法分类查看”两种视图间切换
+### 3.1 存储架构约束
+- 物理路径: `/data/upload`
+    - *注意*: 此路径位于项目根目录之外或 Docker Volume 挂载点,严禁放入 `src` 或 `static` 目录
+- 文件操作: 必须使用 Node.js 的 `fs/promises` 或 `fs` 模块
 
-#### 3.4. 内容复制
-- 单块复制: 每个提示词块旁边需提供一个“复制”按钮,点击后将该块的文本内容复制到剪贴板
-- 全部复制: 在提示词详情页的顶部,需提供一个“全部复制”按钮,点击后将该提示词的所有块按顺序拼接(以两个换行符 `\n\n` 分隔)后,一次性复制到剪贴板
+### 3.2 文件上传 (`/upload`)
+- UI: 支持拖拽或点击上传,显示上传进度
+- 传输模式: 必须使用 Stream (流) 处理
+    - *禁止* 将整个文件读入 Buffer(内存),防止大文件并发导致 OOM(内存溢出)
+    - 使用 `fs.createWriteStream` 将请求流直接管道传输到磁盘
+- 配额检查 (Pre-write check):
+    1. 单文件限制: 前端校验 + 后端校验(读取 Request Header `Content-Length` 或在流传输中统计字节数,超过 100MB 立即截断并报错)
+    2. 总量限制 (20GB): 每次写入前,快速检查 `/data/upload` 占用空间。若 `Current + New > 20GB`,拒绝写入
+- 安全性:
+    - 文件名清洗: 必须过滤 `../`, `/`, `\` 等字符,防止 Path Traversal (路径遍历攻击)。建议重命名文件或仅保留安全字符
 
-#### 3.5. 数据导入/导出
-- 导出: 提供“导出全部”功能,将数据库中所有提示词及其块结构导出为一个JSON文件
-- 导入: 提供“导入”功能,允许用户上传一个JSON文件
-    - 安全约束: 在执行导入操作前,系统必须自动将当前活动的数据库文件完整备份到指定的备份目录
-    - 覆盖逻辑: 导入将清空现有所有提示词数据,并替换为JSON文件中的内容.此操作必须向用户显示明确的警告信息
+### 3.3 文件列表与下载
+- 列表展示:
+    - 字段: 文件名、大小 (MB/KB)、上传时间、剩余有效期 (倒计时)
+    - 排序: 按 `mtime` (修改时间) 倒序排列
+- 下载机制:
+    - 由于文件不在 `static` 目录,需创建服务端路由 `src/routes/api/file/[filename]/+server.ts`
+    - 该路由需复用 模块一 的鉴权逻辑
+    - 实现: 创建 `ReadStream` 并通过 `new Response(stream)` 返回,Header 设置 `Content-Disposition: attachment; filename="xxx"`.
 
-#### 3.6. 备份与恢复
-- 专属页面: 需创建一个独立的“备份管理”页面
-- 功能:
-    - 查看: 列表展示所有已存在的数据库备份文件(按时间倒序排列)
-    - 恢复: 用户可以选择一个备份文件进行恢复.恢复操作将用所选备份文件覆盖当前数据库.恢复操作不应产生新的备份
-    - 删除: 用户可以删除不再需要的备份文件
-- 安全约束: 所有恢复和删除操作都必须经过二次弹窗确认 (`window.confirm`)
+### 3.4 生命周期管理 (TTL Daemon)
+- 策略: 12小时过期策略 (`Date.now() - file.mtime > 12h`).
+- 触发机制:
+    - *方案*: 在 `hooks.server.ts` 的顶层(Server 启动时)初始化一个 `setInterval`
+    - *频率*: 每 1 小时执行一次
+    - *动作*: 遍历目录 -> 检查 mtime -> `fs.unlink` 删除过期文件
+- 硬性约束: 过期文件直接物理删除,不设回收站,确保空间释放
 
-#### 3.7. 聚类可视化
-- 专属页面: 需创建一个独立的“提示词浏览器”页面
-- 实现方式: 使用HTML5 `<canvas>` 元素进行渲染
-- 数据来源: 页面加载时,获取所有包含二维坐标 (`pos_x`, `pos_y`) 的提示词
-- 展示逻辑:
-    - 每个提示词在Canvas上表现为一个点
-    - 点的相对位置由其文本内容的嵌入向量经过降维算法(如 UMAP)计算得出
-    - 不同算法分类 (`algo_category`) 的点可以使用不同的颜色进行区分
-- 交互: 当鼠标悬停在某个点上时,在点附近显示该提示词的标题
+---
 
-### 4. UI/UX 约束
+## 4. 开发与工程约束 (Constraints)
 
-- 样式: 使用原生CSS(或PostCSS等预处理器)进行样式构建,避免引入大型CSS框架.设计简洁、干净,注重间距和排版
-- 响应式: 界面必须同时适配桌面和移动设备浏览器.使用Flexbox、Grid和媒体查询实现流式布局
-- 主题:
-    - 提供浅色和深色两种主题模式
-    - 提供一个易于访问的切换按钮
-    - 用户的选择应通过 `localStorage` 持久化,以便下次访问时保持一致
-- 资源: 尽量减少或不使用Emoji及SVG/PNG图片,以保证加载速度和界面纯粹性
+### 4.1 技术栈规范
+- 语言: TypeScript (必须开启 `strict: true`)
+- 框架: SvelteKit (利用 Form Actions 处理 POST 请求,Server Load 处理数据加载)
+- 样式: TailwindCSS (保持与现有项目一致,若有)
 
-### 5. 技术架构与约束
+### 4.2 错误处理
+- HTTP 状态码:
+    - `401 Unauthorized`: 未登录
+    - `403 Forbidden`: 密码错误或无权访问
+    - `413 Payload Too Large`: 文件超过 100MB
+    - `507 Insufficient Storage`: 总容量超过 20GB
+- 反馈: 所有错误必须在前端有明确的 Toast 或 Banner 提示
 
-- 前端框架: SvelteKit
-- 后端逻辑: SvelteKit (Server-side Endpoints / Form Actions)
-- 数据库: SQLite.必须使用高性能的Node.js驱动,如 `better-sqlite3`.必须开启WAL (Write-Ahead Logging) 模式
-- 本地计算脚本: Python
-    - 依赖库: `requests` (与服务器通信), `ollama` (调用本地模型), `numpy` (数学计算), `umap-learn` (降维), `hdbscan` (聚类)
-    - 本地模型: 通过Ollama运行 `qwen3-embedding:0.6b` 或 `embedding-gemma:latest`.脚本不应硬编码模型,应允许用户配置
-- 部署环境:
-    - 服务器: 2核 CPU, 2GB 内存, 40GB ESSD 云服务器
-    - 运行方式: SvelteKit项目应使用 `adapter-node` 构建为独立的Node.js服务运行
+### 4.3 安全性 Checklist
+1. [ ] CSRF 防护: 确保 SvelteKit 默认的 CSRF 保护开启(Form Actions 自动处理)
+2. [ ] Path Traversal: 验证上传和下载的文件名不包含路径跳转字符
+3. [ ] Session Hijacking: 确保 Cookie 为 `HttpOnly`,防止 XSS 窃取
 
-### 6. 安全约束
+---
 
-- API鉴权:
-    - 所有执行写入操作(`POST`, `PUT`, `DELETE`, `PATCH`)的API端点,以及为本地脚本提供数据的端点,都必须受API密钥保护
-    - 密钥在服务器端通过环境变量(`.env`文件)`API_SECRET` 定义
-    - 客户端(本地Python脚本)在请求的 `Authorization` Header中以 `Bearer <API_SECRET>` 的形式提供密钥
-    - SvelteKit应使用 `src/hooks.server.ts` 实现一个全局钩子来验证此密钥
-- 文件系统访问:
-    - 备份目录的路径应通过环境变量 `BACKUP_DIR` 定义
-    - 所有处理文件路径的API(如备份恢复)必须严格校验传入的文件名参数,防止路径遍历攻击(如 `../../`)
+## 5. 实施路线图 (Roadmap)
 
-### 7. 数据库 Schema (SQLite)
+1. Phase 1: 基础设施 (Backend)
+    - 配置环境变量
+    - 编写 `src/hooks.server.ts` 鉴权逻辑
+    - 编写 `lib/server/fileUtils.ts` (封装配额计算、清理逻辑)
 
-```sql
--- 提示词主表
--- 存储每个提示词的元数据和分类信息
-CREATE TABLE prompts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    user_category TEXT, -- 用户自定义分类, 可为空
-    algo_category TEXT, -- 算法聚类分类, 可为空
-    pos_x REAL,         -- 可视化2D坐标X, 可为空
-    pos_y REAL,         -- 可视化2D坐标Y, 可为空
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP -- 可通过触发器自动更新
-);
+2. Phase 2: 登录模块 (Frontend + Integration)
+    - 开发 `/login` 页面及 Action
+    - 测试 Session 登录与 API Key 穿透访问
 
--- 提示词块表
--- 存储每个提示词的具体内容块, 与主表一对多关联
-CREATE TABLE prompt_blocks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    prompt_id INTEGER NOT NULL,
-    content TEXT NOT NULL,
-    sort_order INTEGER NOT NULL, -- 用于排序, 数值越小越靠前
-    FOREIGN KEY(prompt_id) REFERENCES prompts(id) ON DELETE CASCADE
-);
+3. Phase 3: 文件模块 (Core)
+    - 开发文件列表 `load` 函数
+    - 实现文件下载 API Endpoint
+    - 实现文件上传 Action (带 Stream 处理)
 
--- 创建索引以优化查询性能
-CREATE INDEX idx_user_category ON prompts(user_category);
-CREATE INDEX idx_algo_category ON prompts(algo_category);
-CREATE UNIQUE INDEX idx_prompt_blocks_order ON prompt_blocks(prompt_id, sort_order);
-```
-
-### 8. API 端点 (Endpoint) 规范
-
-- `GET /api/prompts`: 获取所有提示词及其块
-- `POST /api/prompts`: (Form Action) 新建提示词
-- `PUT /api/prompts/:id`: (Form Action) 更新指定ID的提示词
-- `DELETE /api/prompts/:id`: (Form Action) 删除指定ID的提示词
-- `PATCH /api/prompts/analysis-results`: [需API密钥] 批量更新提示词的`algo_category`, `pos_x`, `pos_y`
-    - Request Body: `[{id: number, algo_category: string, pos_x: number, pos_y: number}, ...]`
-- `POST /api/import`: [需API密钥] 导入JSON数据
-- `GET /api/backups`: 获取备份文件列表
-- `POST /api/backups/restore`: 恢复指定的备份文件
-    - Request Body: `{ "filename": "backup_name.db" }`
-- `DELETE /api/backups/:filename`: 删除指定的备份文件
+4. Phase 4: 自动化与测试
+    - 挂载自动清理任务 (Interval)
+    - 进行边界测试 (上传 101MB 文件,填满 20GB,测试过期删除)

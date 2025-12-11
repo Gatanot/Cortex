@@ -399,6 +399,43 @@ a:hover {
     padding-right: var(--space-2xl);
 }
 
+/* ===== Alerts (通用提示) ===== */
+.alert {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: calc(var(--space-sm) + 2px) var(--space-md);
+    font-size: var(--font-size-sm);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-tertiary);
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border-light);
+}
+
+.alert .alert-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.alert-danger {
+    background: var(--color-danger-light);
+    color: var(--color-danger);
+    border-color: rgba(0,0,0,0.04);
+}
+
+.alert-success {
+    background: var(--color-success-light);
+    color: var(--color-success);
+    border-color: rgba(0,0,0,0.04);
+}
+
+/* ===== Utility: full width button variant ===== */ 
+.btn-block {
+    display: inline-flex;
+    width: 100%;
+    justify-content: center;
+}
+
 /* Search Input */
 .search-input-wrapper {
     position: relative;
