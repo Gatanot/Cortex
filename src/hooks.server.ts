@@ -4,18 +4,13 @@
 import 'dotenv/config';
 import type { Handle } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { json, redirect } from '@sveltejs/kit';
-import { verifySession } from '$lib/server/sessionUtils';
+import { json } from '@sveltejs/kit';
 import { cleanupExpiredFiles } from '$lib/server/fileUtils';
 
 // Diagnostic: Log environment variable status on startup
 console.log('=== Cortex Environment Variables Status ===');
 console.log('NODE_ENV:', process.env.NODE_ENV || 'not set');
-console.log('WEB_PASSWORD exists in process.env:', !!process.env.WEB_PASSWORD);
-console.log('WEB_PASSWORD exists in env:', !!env.WEB_PASSWORD);
-console.log('WEB_PASSWORD length:', env.WEB_PASSWORD ? env.WEB_PASSWORD.length : 0);
 console.log('API_SECRET exists:', !!env.API_SECRET);
-console.log('SESSION_SECRET exists:', !!env.SESSION_SECRET);
 console.log('Working directory:', process.cwd());
 console.log('==========================================');
 
@@ -36,7 +31,6 @@ const ALWAYS_PROTECTED_PATHS = [
 
 // Static resources and public paths that don't require authentication
 const PUBLIC_PATHS = [
-    '/login',
     '/_app',
     '/favicon.ico',
     '/robots.txt'
@@ -47,14 +41,14 @@ let cleanupInterval: NodeJS.Timeout | null = null;
 
 function startCleanupDaemon() {
     if (cleanupInterval) return;
-    
+
     // Run cleanup immediately on startup
     cleanupExpiredFiles().then(count => {
         if (count > 0) {
             console.log(`[Startup] Cleaned up ${count} expired files`);
         }
     });
-    
+
     // Then run every hour
     cleanupInterval = setInterval(async () => {
         const count = await cleanupExpiredFiles();
@@ -117,15 +111,6 @@ export const handle: Handle = async ({ event, resolve }) => {
         }
     }
 
-    // 3. Session check - verify cookie for web users
-    const hasValidSession = verifySession(event.cookies);
-    
-    if (hasValidSession) {
-        // Session is valid, allow access
-        return resolve(event);
-    }
-
-    // 4. Rejection strategy - redirect to login if not authenticated
-    // If we're here, the user has no valid Bearer token or Session
-    throw redirect(303, `/login?redirect=${encodeURIComponent(pathname)}`);
+    // 3. Allow all other requests - no session/password authentication required
+    return resolve(event);
 };
