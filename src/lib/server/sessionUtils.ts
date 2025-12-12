@@ -42,13 +42,20 @@ export function createSession(cookies: Cookies): void {
     const signature = generateSignature(dataString, sessionSecret);
     const cookieValue = `${Buffer.from(dataString).toString('base64')}.${signature}`;
     
+    // In production, only use secure cookies if HTTPS is available
+    // Set FORCE_SECURE_COOKIE=true in .env if you have HTTPS
+    const useSecureCookie = env.FORCE_SECURE_COOKIE === 'true' || 
+        (process.env.NODE_ENV === 'production' && env.FORCE_SECURE_COOKIE !== 'false');
+    
     cookies.set(COOKIE_NAME, cookieValue, {
         path: '/',
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: useSecureCookie,
         sameSite: 'lax',
         maxAge
     });
+    
+    console.log('[session] Cookie set with secure:', useSecureCookie, 'NODE_ENV:', process.env.NODE_ENV);
 }
 
 /**

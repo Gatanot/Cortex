@@ -8,6 +8,17 @@ import { json, redirect } from '@sveltejs/kit';
 import { verifySession } from '$lib/server/sessionUtils';
 import { cleanupExpiredFiles } from '$lib/server/fileUtils';
 
+// Diagnostic: Log environment variable status on startup
+console.log('=== Cortex Environment Variables Status ===');
+console.log('NODE_ENV:', process.env.NODE_ENV || 'not set');
+console.log('WEB_PASSWORD exists in process.env:', !!process.env.WEB_PASSWORD);
+console.log('WEB_PASSWORD exists in env:', !!env.WEB_PASSWORD);
+console.log('WEB_PASSWORD length:', env.WEB_PASSWORD ? env.WEB_PASSWORD.length : 0);
+console.log('API_SECRET exists:', !!env.API_SECRET);
+console.log('SESSION_SECRET exists:', !!env.SESSION_SECRET);
+console.log('Working directory:', process.cwd());
+console.log('==========================================');
+
 const API_SECRET = env.API_SECRET || 'dev-secret-key';
 
 // Protected routes that require API key authentication
