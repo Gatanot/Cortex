@@ -6,10 +6,10 @@ import {
     sanitizeFilename, 
     hasEnoughSpace,
     MAX_FILE_SIZE,
-    getFilePath
+    getFilePath,
+    fileExists
 } from '$lib/server/fileUtils';
-import { createWriteStream } from 'fs';
-import { unlink } from 'fs/promises';
+import { writeFile, unlink } from 'fs/promises';
 
 export const load = async () => {
     await ensureUploadDir();
@@ -54,22 +54,30 @@ export const actions = {
             const sanitizedName = sanitizeFilename(file.name);
             const filePath = getFilePath(sanitizedName);
 
+            console.log('Uploading file:', {
+                originalName: file.name,
+                sanitizedName,
+                filePath,
+                fileSize: file.size
+            });
+
             // Ensure upload directory exists
             await ensureUploadDir();
 
-            // Save file using stream
+            // Save file directly using writeFile
             const arrayBuffer = await file.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
             
-            await new Promise<void>((resolve, reject) => {
-                const writeStream = createWriteStream(filePath);
-                
-                writeStream.on('error', reject);
-                writeStream.on('finish', resolve);
-                
-                writeStream.write(buffer);
-                writeStream.end();
-            });
+            console.log('Buffer created, size:', buffer.length);
+            
+            // Write file
+            await writeFile(filePath, buffer);
+            
+            console.log('File saved successfully:', filePath);
+            
+            // Verify file was created
+            const exists = await fileExists(sanitizedName);
+            console.log('File exists after write:', exists);
 
             return {
                 success: true,

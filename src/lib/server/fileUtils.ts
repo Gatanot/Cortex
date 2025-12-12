@@ -22,11 +22,26 @@ export async function ensureUploadDir(): Promise<void> {
  * 清洗文件名，防止路径遍历攻击
  */
 export function sanitizeFilename(filename: string): string {
-    // 移除路径分隔符和特殊字符
-    return filename
-        .replace(/[\/\\]/g, '')
-        .replace(/\.\./g, '')
-        .replace(/[^a-zA-Z0-9._-]/g, '_');
+    // 移除路径分隔符和危险字符
+    let sanitized = filename
+        .replace(/[\/\\]/g, '')  // 移除路径分隔符
+        .replace(/\.\./g, '.')   // 移除双点
+        .replace(/[<>:"|?*]/g, '') // 移除 Windows 不允许的字符
+        .trim();
+    
+    // 确保文件名不为空
+    if (!sanitized || sanitized === '.' || sanitized === '..') {
+        sanitized = `file_${Date.now()}`;
+    }
+    
+    // 确保文件名长度合理（Windows 最大 255 字符）
+    if (sanitized.length > 255) {
+        const ext = path.extname(sanitized);
+        const nameWithoutExt = sanitized.slice(0, 255 - ext.length);
+        sanitized = nameWithoutExt + ext;
+    }
+    
+    return sanitized;
 }
 
 /**
