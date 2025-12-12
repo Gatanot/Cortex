@@ -110,5 +110,14 @@ export function destroySession(cookies: Cookies): void {
  */
 export function verifyPassword(password: string): boolean {
     const correctPassword = env.WEB_PASSWORD || 'admin';
+
+    // DEBUG: log presence/lengths (do NOT log the actual password in production)
+    try {
+        // Show whether env value exists and lengths to help debug deployment issues
+        console.log('[auth] verifyPassword called - WEB_PASSWORD set:', !!env.WEB_PASSWORD, 'provided length:', password ? password.length : 0, 'expected length:', correctPassword ? correctPassword.length : 0);
+    } catch (e) {
+        // ignore logging errors
+    }
+
     return password === correctPassword;
 }
